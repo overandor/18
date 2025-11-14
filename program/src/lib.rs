@@ -26,17 +26,20 @@ pub struct SwapBundle {
 entrypoint!(process_instruction);
 
 pub fn process_instruction(
-    program_id: &Pubkey,
+    _program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
     let bundle = SwapBundle::try_from_slice(data).map_err(|_| ProgramError::InvalidInstructionData)?;
     let accounts_iter = &mut accounts.iter();
 
-    let user = next_account_info(accounts_iter)?;
-    let vault = next_account_info(accounts_iter)?;
+    let _user = next_account_info(accounts_iter)?;
+    let _vault = next_account_info(accounts_iter)?;
 
     msg!("router::bundle_start legs={}", bundle.legs.len());
+
+    // On-chain validation of the swap path
+    validate_swap_path(&bundle.legs)?;
 
     for (i, leg) in bundle.legs.iter().enumerate() {
         msg!("leg {} program={}", i, leg.pool_program);
@@ -68,6 +71,29 @@ pub fn process_instruction(
     }
 
     msg!("router::bundle_complete");
+    Ok(())
+}
+
+fn validate_swap_path(legs: &[SwapLeg]) -> ProgramResult {
+    if legs.is_empty() {
+        msg!("Swap path cannot be empty");
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    for i in 0..legs.len() - 1 {
+        let current_leg = &legs[i];
+        let next_leg = &legs[i + 1];
+
+        if current_leg.token_out != next_leg.token_in {
+            msg!(
+                "Invalid swap path: token mismatch between leg {} and {}",
+                i,
+                i + 1
+            );
+            return Err(ProgramError::InvalidInstructionData);
+        }
+    }
+
     Ok(())
 }
 
